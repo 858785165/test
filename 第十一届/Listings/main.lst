@@ -1,0 +1,359 @@
+C51 COMPILER V9.56.0.0   MAIN                                                              03/02/2022 17:20:56 PAGE 1   
+
+
+C51 COMPILER V9.56.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: D:\Keil5 C51v956\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listing
+                    -s\main.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <STC15F2K60S2.H>
+   2          #include "intrins.h"
+   3          #include "iic.h"
+   4          #define u8 unsigned char
+   5          #define u16 unsigned int  
+   6          #define stat0 0
+   7          #define stat1 1
+   8          #define stat2 2
+   9          #define nokey 0xff
+  10          
+  11          bit vol_flag;
+  12          bit count_first=1;
+  13          bit count_flag1=0;
+  14          bit count_flag2=0;
+  15          u8 undefined_key=0;
+  16          u8 code duanma[]={0xc0,0xf9,0xa4,0xb0,0x99,0x92,0x82,0xf8,0x80,0x90,0xbf,0xff,0xc1,0x8c,0x89};
+  17          u8 dis_smg[]={0,11,11,11,11,11,6,7,8};
+  18          u8 led_mode;
+  19          u8 smg_mode=0;
+  20          u8 count;
+  21          u8 vol_set=0;
+  22          u8 vol;
+  23          void Delay5ms()   //@12.000MHz
+  24          {
+  25   1        unsigned char i, j;
+  26   1      
+  27   1        i = 59;
+  28   1        j = 90;
+  29   1        do
+  30   1        {
+  31   2          while (--j);
+  32   2        } while (--i);
+  33   1      }
+  34          
+  35          void Timer0Init(void)   //100微秒@12.000MHz
+  36          {
+  37   1        AUXR |= 0x80;   //定时器时钟1T模式
+  38   1        TMOD &= 0xF0;   //设置定时器模式
+  39   1        TL0 = 0x50;   //设置定时初始值
+  40   1        TH0 = 0xFB;   //设置定时初始值
+  41   1        TF0 = 0;    //清除TF0标志
+  42   1        TR0 = 1;    //定时器0开始计时
+  43   1      
+  44   1        ET0=1;
+  45   1        EA=1;
+  46   1      }
+  47          
+  48          void port(u8 pos,u8 value)
+  49          {
+  50   1        P2=0X00;P0=0X00;P2=0X00;
+  51   1        P2=0XC0;P0=0x01<<(pos-1);P2=0X00;
+  52   1        P2=0XE0;P0=value;P2=0X00;
+  53   1      }
+  54          void KBD()
+C51 COMPILER V9.56.0.0   MAIN                                                              03/02/2022 17:20:56 PAGE 2   
+
+  55          {
+  56   1        static unsigned char stat=stat0;
+  57   1        u8 key_temp=0;
+  58   1        u8 key1,key2;
+  59   1        
+  60   1        P30=0;P31=0;P32=0;P33=0;P34=1;P35=1;P42=1;P44=1;
+  61   1        if(P44==0)key1=0x70;
+  62   1        if(P42==0)key1=0xb0;
+  63   1        if(P35==0)key1=0xd0;
+  64   1        if(P34==0)key1=0xe0;
+  65   1        if((P44==1)&&(P42==1)&&(P35==1)&&(P34==1))key1=0xf0;
+  66   1        
+  67   1        P30=1;P31=1;P32=1;P33=1;P34=0;P35=0;P42=0;P44=0;
+  68   1        if(P33==0)key2=0x07;
+  69   1        if(P32==0)key2=0x0b;
+  70   1        if(P31==0)key2=0x0d;
+  71   1        if(P30==0)key2=0x0e;
+  72   1        if((P33==1)&&(P32==1)&&(P31==1)&&(P30==1))key2=0x0f;
+  73   1        
+  74   1        key_temp=key1|key2;
+  75   1        
+  76   1        switch(stat)
+  77   1        {
+  78   2          case stat0:
+  79   2            if(key_temp != nokey)
+  80   2            {
+  81   3              stat=stat1;
+  82   3            }
+  83   2            break;
+  84   2          case stat1:
+  85   2            if(key_temp == nokey)
+  86   2            {
+  87   3              stat=stat0;
+  88   3            }
+  89   2            else
+  90   2            {
+  91   3              switch(key_temp)
+  92   3              {
+  93   4                case 0x77:undefined_key++;break;
+  94   4                case 0x7b:undefined_key++;break;
+  95   4                case 0x7d:undefined_key++;break;
+  96   4                case 0x7e:undefined_key++;break;
+  97   4                
+  98   4                case 0xb7:undefined_key++;break;
+  99   4                case 0xbb:undefined_key++;break;
+ 100   4                case 0xbd:undefined_key++;break;
+ 101   4                case 0xbe:undefined_key++;break;
+ 102   4                
+ 103   4                case 0xd7:
+ 104   4                  undefined_key=0;
+ 105   4                if(smg_mode==1)
+ 106   4                  write_24(0x00,(u8)vol_set*10);
+ 107   4                if(++smg_mode==3)smg_mode=0;
+ 108   4                break;//S12
+ 109   4                
+ 110   4                case 0xdb:
+ 111   4                  undefined_key=0;
+ 112   4                  if(smg_mode==2)
+ 113   4                  {
+ 114   5                    count=0;
+ 115   5                  }
+ 116   4                  break;//S13
+C51 COMPILER V9.56.0.0   MAIN                                                              03/02/2022 17:20:56 PAGE 3   
+
+ 117   4                
+ 118   4                case 0xdd:undefined_key++;break;
+ 119   4                case 0xde:undefined_key++;break;
+ 120   4                
+ 121   4                case 0xe7:
+ 122   4                undefined_key=0;
+ 123   4                  if(smg_mode==1)
+ 124   4                    {
+ 125   5                      if(vol_set>=500)  
+ 126   5                        vol_set=0;
+ 127   5                      else
+ 128   5                        vol_set+=50;
+ 129   5                    }
+ 130   4                  break;//S16
+ 131   4                case 0xeb:
+ 132   4                undefined_key=0;
+ 133   4                  if(smg_mode==1)
+ 134   4                    {
+ 135   5                      if(vol_set ==0) 
+ 136   5                        vol_set=500;
+ 137   5                      else
+ 138   5                        vol_set-=50;
+ 139   5                    }
+ 140   4                  break;//S17
+ 141   4                
+ 142   4                case 0xed:undefined_key++;break;
+ 143   4                case 0xee:undefined_key++;break;
+ 144   4              }
+ 145   3              stat=stat2;
+ 146   3            }
+ 147   2            break;
+ 148   2          case stat2:
+ 149   2            if(key_temp == nokey)
+ 150   2            {
+ 151   3              stat=stat0;
+ 152   3            }
+ 153   2          break;        
+ 154   2        }
+ 155   1      }
+ 156          
+ 157          
+ 158          void allinit()
+ 159          {
+ 160   1        P2=0X00;P0=0X00;P2=0X00;
+ 161   1        P2=0X80;P0=0XFF;P2=0X00;
+ 162   1        P2=0XA0;P0=0X00;P2=0X00;
+ 163   1        P2=0XE0;P0=0XFF;P2=0X00;
+ 164   1      }
+ 165          
+ 166          
+ 167          
+ 168          void main()
+ 169          {
+ 170   1        Timer0Init();
+ 171   1        allinit();
+ 172   1        write_adc(0x03);
+ 173   1        Delay5ms();
+ 174   1        vol_set=read_24(0x00)/10;
+ 175   1        while(1)
+ 176   1        {
+ 177   2          vol=(u16)read_adc(0x03)*1.96 +0.5;
+ 178   2          vol=(u16)read_adc(0x03)*1.96 +0.5;
+C51 COMPILER V9.56.0.0   MAIN                                                              03/02/2022 17:20:56 PAGE 4   
+
+ 179   2          //一开始判断测量值是否小于设置值，方便L1灯的显示;
+ 180   2          if(vol<vol_set)
+ 181   2          {
+ 182   3            vol_flag=1;
+ 183   3          }
+ 184   2          else
+ 185   2          {
+ 186   3            vol_flag=0;
+ 187   3            vol_set=0;
+ 188   3          }
+ 189   2      //===========曲线计数===================    
+ 190   2          if(vol>vol_set && count_first)
+ 191   2          {
+ 192   3            //对应第二个的第一个
+ 193   3            count_flag1=0;
+ 194   3            count_flag2=1;
+ 195   3            count_first=0;
+ 196   3          }
+ 197   2          else
+ 198   2          {
+ 199   3            //对应第二个的第二个
+ 200   3            //vol<vol_set
+ 201   3            count_flag1=1;
+ 202   3            count_flag2=0;
+ 203   3            count_first=0;
+ 204   3          }
+ 205   2          
+ 206   2          if(vol>vol_set && count_flag1)
+ 207   2          {
+ 208   3            count++;
+ 209   3            count_flag1=0;
+ 210   3            count_flag2=1;
+ 211   3          }
+ 212   2          else if(count_flag2 &&(vol>vol_set))
+ 213   2          {
+ 214   3            count++;
+ 215   3            count_flag2=0;
+ 216   3            count_flag1=1;
+ 217   3          }
+ 218   2      //===========设置数码管数组===========    
+ 219   2          if(smg_mode==0)
+ 220   2          {
+ 221   3            dis_smg[6]=vol /100;
+ 222   3            dis_smg[7]=vol /10%10;
+ 223   3            dis_smg[8]=vol %10;
+ 224   3          }
+ 225   2          else if(smg_mode==1)
+ 226   2          {
+ 227   3            dis_smg[6]=vol /100;
+ 228   3            dis_smg[7]=vol /10%10;
+ 229   3            dis_smg[8]=vol %10;
+ 230   3          }
+ 231   2          else if(smg_mode==2)
+ 232   2          {
+ 233   3            dis_smg[6]=11;
+ 234   3            dis_smg[7]=count/10;
+ 235   3            dis_smg[8]=count %10;
+ 236   3          }
+ 237   2          
+ 238   2          KBD();
+ 239   2          Delay5ms();
+ 240   2        }
+C51 COMPILER V9.56.0.0   MAIN                                                              03/02/2022 17:20:56 PAGE 5   
+
+ 241   1      }
+ 242          
+ 243          
+ 244          
+ 245          void timer0() interrupt 1 using 1
+ 246          {
+ 247   1        static unsigned char count=0,i=0,led_count=0;
+ 248   1        static unsigned char led_temp=0xff;
+ 249   1        count++;
+ 250   1        if(count==1)
+ 251   1        {
+ 252   2          count=0;
+ 253   2      //=====控制数码管==========
+ 254   2          if(smg_mode==0&&(i==6 || i==1))
+ 255   2        {
+ 256   3          if(i==6)
+ 257   3          {
+ 258   4            port(i,duanma[dis_smg[i]]&0x7f);
+ 259   4          }
+ 260   3          else if(i==1)
+ 261   3          {
+ 262   4            port(i,duanma[12]);
+ 263   4          }
+ 264   3        }
+ 265   2          else if(smg_mode==1&&(i==6 || i==1))
+ 266   2         {
+ 267   3          if(i==6)
+ 268   3          {
+ 269   4            port(i,duanma[dis_smg[i]]&0x7f);
+ 270   4          }
+ 271   3          else if(i==1)
+ 272   3          {
+ 273   4            port(i,duanma[13]);
+ 274   4          }
+ 275   3          }
+ 276   2         
+ 277   2          else if(smg_mode==2 && (i==1))
+ 278   2          {
+ 279   3            port(i,duanma[14]);
+ 280   3          }
+ 281   2          else
+ 282   2          {
+ 283   3            port(i,duanma[dis_smg[i]]);
+ 284   3          }
+ 285   2          i++;
+ 286   2          if(i==9)i=1;
+ 287   2        }
+ 288   1        
+ 289   1      //======控制led灯==========
+ 290   1        //L1
+ 291   1        if(vol_flag && (++led_count>50000))
+ 292   1        {
+ 293   2          led_count=0;
+ 294   2          led_temp &= 0xfe;//L1灯亮
+ 295   2        }
+ 296   1        else if(!vol_flag)
+ 297   1        {
+ 298   2          led_temp |= 0x01;//L1灯灭
+ 299   2        }
+ 300   1        
+ 301   1        //L2
+ 302   1        if(count%2)
+C51 COMPILER V9.56.0.0   MAIN                                                              03/02/2022 17:20:56 PAGE 6   
+
+ 303   1        {
+ 304   2          led_temp &= 0xfd;//L2灯亮
+ 305   2        }
+ 306   1        else
+ 307   1        {
+ 308   2          led_temp |= 0x02;//L2灯灭
+ 309   2        }
+ 310   1      
+ 311   1        //L3
+ 312   1        if(undefined_key>=3)
+ 313   1        {
+ 314   2          led_temp &= 0xfb;//L3灯亮
+ 315   2        }
+ 316   1        else
+ 317   1        {
+ 318   2          led_temp |= 0x04;//L3灯灭
+ 319   2        }
+ 320   1        
+ 321   1        P2=0X00;P0=0X00;P2=0X00;
+ 322   1        P2=0X80;P0=led_temp;P2=0X00;
+ 323   1        
+ 324   1      }
+ 325            
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    916    ----
+   CONSTANT SIZE    =     15    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     20       3
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      4    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
